@@ -15,8 +15,8 @@ class NatureRemoOptionsFlowHandler(config_entries.OptionsFlow):
     Defines the options flow for Nature Remo integration.
     """
 
-    def __init__(self, config_entry):
-        self.config_entry = config_entry
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        self.options = dict(config_entry.options)
 
     async def async_step_init(self, user_input=None):
         if user_input is not None:
@@ -82,5 +82,17 @@ class NatureRemoOptionsFlowHandler(config_entries.OptionsFlow):
             key = device.id
             self.device_id_map[label] = key
             data_schema[vol.Optional(label, default=options.get(key, ""))] = str
+
+            # 温度・湿度エンティティIDの入力欄を追加
+            temp_label = f"{name} 温度エンティティID"
+            hum_label = f"{name} 湿度エンティティID"
+            temp_key = f"{key}_temperature_entity"
+            hum_key = f"{key}_humidity_entity"
+            data_schema[vol.Optional(temp_label, default=options.get(temp_key, ""))] = str
+            data_schema[vol.Optional(hum_label, default=options.get(hum_key, ""))] = str
+
+            # 保存時のキー変換用
+            self.device_id_map[temp_label] = temp_key
+            self.device_id_map[hum_label] = hum_key
 
         return self.async_show_form(step_id="init", data_schema=vol.Schema(data_schema))

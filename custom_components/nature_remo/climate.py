@@ -244,20 +244,55 @@ class NatureRemoClimate(ClimateEntity):
     def update_status(self) -> None:
         """
         コーディネーターで取得した値に更新する.
+        設定で指定された外部エンティティの値があればそれを優先して温度・湿度に反映する.
         Update values using the data from the coordinator.
+        If there are values from an external entity specified in the settings,
+        those will take priority and be reflected in the temperature and humidity.
         """
         _LOGGER.debug(f"[{self._attr_name}] Start update_status.")
         appliance = self._coordinator.data.get(self._appliance_id, {})
 
-        # Climateエンティティに紐づくデバイスから温度、湿度を取得する
+
+        # デバイスごとの温度・湿度エンティティIDを options から取得
+        external_temperature_entity = None
+        external_humidity_entity = None
+        temperature_set = False
+        humidity_set = False
+        try:
+            hass = getattr(self._coordinator, "hass", None)
+            config_entry = None
+            if hass:
+                for entry in hass.config_entries.async_entries(DOMAIN):
+                    if entry.options:
+                        id = self.device_entry.id
+                        temp_key = f"{id}_temperature_entity"
+                        hum_key = f"{id}_humidity_entity"
+                        external_temperature_entity = entry.options.get(temp_key)
+                        external_humidity_entity = entry.options.get(hum_key)
+                        break
+            # Home Assistantのstateから外部エンティティの値を取得
+            if external_temperature_entity and hass:
+                state = hass.states.get(external_temperature_entity)
+                if state and state.state not in (None, "unknown", "unavailable"):
+                    self._temperature = float(state.state)
+                    temperature_set = True
+            if external_humidity_entity and hass:
+                state = hass.states.get(external_humidity_entity)
+                if state and state.state not in (None, "unknown", "unavailable"):
+                    self._humidity = int(float(state.state))
+                    humidity_set = True
+        except Exception as e:
+            _LOGGER.error(f"Error getting external entity value: {e}")
+
+        # 外部エンティティで値がセットされていなければ、Climateエンティティに紐づくデバイスから温度、湿度を取得する
         device = self._coordinator.devices[self._device["device_id"]].get("events", {})
         if device:
             # 室温
-            if "te" in device:
+            if not temperature_set and "te" in device:
                 self._temperature = device["te"].get("val")
 
             # 湿度
-            if "hu" in device:
+            if not humidity_set and "hu" in device:
                 self._humidity = device["hu"].get("val")
 
         # settingsから取得できる情報
